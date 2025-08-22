@@ -5,43 +5,18 @@ import AddConnectionModal from './AddConnectionModal';
 import AddJobModal from './AddJobModal';
 import JobHistoryModal from './JobHistoryModal';
 import EditJobModal from './EditJobModal';
-import NotificationModal from './NotificationModal'; // Impor modal baru
+import NotificationModal from './NotificationModal';
+import EditConnectionNameModal from './EditConnectionNameModal';
 
-// Definisikan tipe data untuk semua entitas
-interface DecodedToken {
-  client: {
-    id: string;
-  };
-}
-
-interface ClientData {
-  client_id: string;
-  company_name: string;
-  email: string;
-}
-
-interface CrmConnection {
-  connection_id: string;
-  crm_type: string;
-  created_at: string;
-}
-
-interface BackupJob {
-  job_id: string;
-  job_name: string;
-  schedule: string;
-  is_active: boolean;
-}
-
-interface ModalState {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  type?: 'success' | 'error' | 'confirm';
-  onConfirm?: () => void;
-}
+// ... (Definisi interface tetap sama) ...
+interface DecodedToken { client: { id: string; }; }
+interface ClientData { client_id: string; company_name: string; email: string; }
+interface CrmConnection { connection_id: string; crm_type: string; created_at: string; connection_name: string; }
+interface BackupJob { job_id: string; job_name: string; schedule: string; is_active: boolean; }
+interface ModalState { isOpen: boolean; title: string; message: string; type?: 'success' | 'error' | 'confirm'; onConfirm?: () => void; }
 
 const Dashboard = () => {
+  // ... (Semua state tetap sama) ...
   const [client, setClient] = useState<ClientData | null>(null);
   const [connections, setConnections] = useState<CrmConnection[]>([]);
   const [jobs, setJobs] = useState<{ [key: string]: BackupJob[] }>({});
@@ -50,19 +25,22 @@ const Dashboard = () => {
   const [isJobModalOpen, setIsJobModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isEditJobModalOpen, setIsEditJobModalOpen] = useState<boolean>(false);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [isEditConnectionModalOpen, setIsEditConnectionModalOpen] = useState<boolean>(false);
+  const [selectedConnection, setSelectedConnection] = useState<CrmConnection | null>(null);
   const [selectedJob, setSelectedJob] = useState<BackupJob | null>(null);
   const [modalState, setModalState] = useState<ModalState>({ isOpen: false, title: '', message: '' });
 
+  // ... (Semua fungsi lain tetap sama, kecuali handleAddJob) ...
   const fetchData = useCallback(async () => {
-    // ... (fungsi fetchData tetap sama)
     const token = localStorage.getItem('token');
     if (!token) { setLoading(false); return; }
     try {
       setLoading(true);
       const decoded = jwtDecode<DecodedToken>(token);
-      const clientId = decoded.client.id;
-      const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
+      const clientId = decoded.client.id;const api = axios.create({ 
+        baseURL: 'http://localhost:3000/api', 
+        headers: { 'Authorization': `Bearer ${token}` } 
+      });
       const clientRes = await api.get(`/clients/${clientId}`);
       setClient(clientRes.data);
       const connectionsRes = await api.get('/connections', { params: { clientId } });
@@ -76,109 +54,46 @@ const Dashboard = () => {
     } catch (error) { console.error('Gagal mengambil data dasbor:', error); handleLogout(); }
     finally { setLoading(false); }
   }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+  const handleLogout = () => { localStorage.removeItem('token'); window.location.href = '/login'; };
+  const showNotification = (title: string, message: string, type: 'success' | 'error' = 'success') => { setModalState({ isOpen: true, title, message, type }); };
+  const showConfirmation = (title: string, message: string, onConfirm: () => void) => { setModalState({ isOpen: true, title, message, type: 'confirm', onConfirm }); };
+  const handleAddConnection = (details: { crmType: string; connectionName: string }) => { const existingConnection = connections.find(c => c.crm_type === details.crmType); const proceed = () => { const token = localStorage.getItem('token'); const queryParams = new URLSearchParams({ token: token || '', connectionName: details.connectionName, }); window.location.href = `http://localhost:3000/api/auth/${details.crmType}/connect?${queryParams.toString()}`; }; if (existingConnection) { showConfirmation( 'Connection Exists', `You already have a connection for ${details.crmType}. Do you want to re-authenticate and update it?`, proceed ); } else { proceed(); } };
+  const handleUpdateConnectionName = async (connectionId: string, newName: string) => { try { const token = localStorage.getItem('token'); const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'Authorization': `Bearer ${token}` } }); await api.put(`/connections/${connectionId}`, { connection_name: newName }); showNotification('Success', 'Connection name updated!'); setIsEditConnectionModalOpen(false); fetchData(); } catch (error) { showNotification('Error', 'Failed to update name.', 'error'); } };
+  const handleDeleteConnection = (connectionId: string) => { showConfirmation('Delete Connection', 'Are you sure?', async () => { try { const token = localStorage.getItem('token'); const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'Authorization': `Bearer ${token}` } }); await api.delete(`/connections/${connectionId}`); showNotification('Success', 'Connection deleted!'); fetchData(); } catch (error) { showNotification('Error', 'Failed to delete.', 'error'); } }); };
+  const handleUpdateJob = async (jobId: string, jobDetails: { job_name: string; schedule: string; is_active: boolean }) => { try { const token = localStorage.getItem('token'); const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'Authorization': `Bearer ${token}` } }); await api.put(`/jobs/${jobId}`, jobDetails); showNotification('Success', 'Job updated!'); setIsEditJobModalOpen(false); setSelectedJob(null); fetchData(); } catch (error) { showNotification('Error', 'Failed to update job.', 'error'); } };
+  const handleToggleJobStatus = async (job: BackupJob) => { try { const token = localStorage.getItem('token'); const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'Authorization': `Bearer ${token}` } }); await api.put(`/jobs/${job.job_id}`, { ...job, is_active: !job.is_active }); showNotification('Success', 'Job status updated!'); fetchData(); } catch (error) { showNotification('Error', 'Failed to update status.', 'error'); } };
+  const handleDeleteJob = (jobId: string) => { showConfirmation('Delete Job', 'Are you sure?', async () => { try { const token = localStorage.getItem('token'); const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'Authorization': `Bearer ${token}` } }); await api.delete(`/jobs/${jobId}`); showNotification('Success', 'Job deleted!'); fetchData(); } catch (error) { showNotification('Error', 'Failed to delete job.', 'error'); } }); };
+  const openJobModal = (connection: CrmConnection) => { setSelectedConnection(connection); setIsJobModalOpen(true); };
+  const openHistoryModal = (job: BackupJob) => { setSelectedJob(job); setIsHistoryModalOpen(true); };
+  const openEditJobModal = (job: BackupJob) => { setSelectedJob(job); setIsEditJobModalOpen(true); };
+  const openEditConnectionModal = (connection: CrmConnection) => { setSelectedConnection(connection); setIsEditConnectionModalOpen(true); };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-  };
-
-  const showNotification = (title: string, message: string, type: 'success' | 'error' = 'success') => {
-    setModalState({ isOpen: true, title, message, type });
-  };
-
-  const showConfirmation = (title: string, message: string, onConfirm: () => void) => {
-    setModalState({ isOpen: true, title, message, type: 'confirm', onConfirm });
-  };
-
-  const handleAddConnection = async (crmType: string) => {
-    if (!client) return;
+  const handleAddJob = async (jobDetails: { job_name: string; schedule: string; selected_data: { modules: string[] } }) => {
+    if (!selectedConnection) return;
     try {
       const token = localStorage.getItem('token');
-      const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-      await api.post('/connections', { client_id: client.client_id, crm_type: crmType, encrypted_refresh_token: `dummy_token_for_${crmType}` });
-      showNotification('Success', `Connection for ${crmType} added successfully!`);
-      setIsConnectionModalOpen(false);
-      fetchData();
-    } catch (error) { console.error('Failed to add connection:', error); showNotification('Error', 'Failed to add new connection.', 'error'); }
-  };
+      const api = axios.create({
+        baseURL: 'http://localhost:3000/api',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
 
-  const handleDeleteConnection = async (connectionId: string) => {
-    showConfirmation('Delete Connection', 'Are you sure you want to delete this connection? All associated backup jobs will also be deleted.', async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-            await api.delete(`/connections/${connectionId}`);
-            showNotification('Success', 'Connection deleted successfully!');
-            fetchData();
-        } catch (error) { console.error('Failed to delete connection:', error); showNotification('Error', 'Failed to delete connection.', 'error'); }
-    });
-  };
+      await api.post('/jobs', {
+        connection_id: selectedConnection.connection_id,
+        job_name: jobDetails.job_name,
+        schedule: jobDetails.schedule,
+        selected_data: jobDetails.selected_data, // Kirim data modul yang dipilih
+        storage_region: 'sg',
+      });
 
-  const handleAddJob = async (jobDetails: { job_name: string; schedule: string }) => {
-    if (!selectedConnectionId) return;
-    try {
-      const token = localStorage.getItem('token');
-      const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-      await api.post('/jobs', { connection_id: selectedConnectionId, job_name: jobDetails.job_name, schedule: jobDetails.schedule, storage_region: 'sg' });
       showNotification('Success', `Backup job "${jobDetails.job_name}" added successfully!`);
       setIsJobModalOpen(false);
-      setSelectedConnectionId(null);
+      setSelectedConnection(null);
       fetchData();
-    } catch (error) { console.error('Failed to add job:', error); showNotification('Error', 'Failed to add new backup job.', 'error'); }
-  };
-
-  const handleUpdateJob = async (jobId: string, jobDetails: { job_name: string; schedule: string; is_active: boolean }) => {
-    try {
-      const token = localStorage.getItem('token');
-      const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-      await api.put(`/jobs/${jobId}`, jobDetails);
-      showNotification('Success', 'Backup job updated successfully!');
-      setIsEditJobModalOpen(false);
-      setSelectedJob(null);
-      fetchData();
-    } catch (error) { console.error('Failed to update job:', error); showNotification('Error', 'Failed to update job.', 'error'); }
-  };
-
-  const handleToggleJobStatus = async (job: BackupJob) => {
-    try {
-      const token = localStorage.getItem('token');
-      const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-      const updatedJobDetails = { job_name: job.job_name, schedule: job.schedule, is_active: !job.is_active };
-      await api.put(`/jobs/${job.job_id}`, updatedJobDetails);
-      showNotification('Success', `Job status updated successfully!`);
-      fetchData();
-    } catch (error) { console.error('Failed to toggle job status:', error); showNotification('Error', 'Failed to update job status.', 'error'); }
-  };
-
-  const handleDeleteJob = async (jobId: string) => {
-    showConfirmation('Delete Backup Job', 'Are you sure you want to delete this backup job?', async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const api = axios.create({ baseURL: 'http://localhost:3000/api', headers: { 'x-auth-token': token } });
-            await api.delete(`/jobs/${jobId}`);
-            showNotification('Success', 'Backup job deleted successfully!');
-            fetchData();
-        } catch (error) { console.error('Failed to delete job:', error); showNotification('Error', 'Failed to delete job.', 'error'); }
-    });
-  };
-
-  const openJobModal = (connectionId: string) => {
-    setSelectedConnectionId(connectionId);
-    setIsJobModalOpen(true);
-  };
-
-  const openHistoryModal = (job: BackupJob) => {
-    setSelectedJob(job);
-    setIsHistoryModalOpen(true);
-  };
-
-  const openEditJobModal = (job: BackupJob) => {
-    setSelectedJob(job);
-    setIsEditJobModalOpen(true);
+    } catch (error) {
+      console.error('Failed to add job:', error);
+      showNotification('Error', 'Failed to add new backup job.', 'error');
+    }
   };
 
   if (loading) {
@@ -188,9 +103,10 @@ const Dashboard = () => {
   return (
     <>
       <AddConnectionModal isOpen={isConnectionModalOpen} onClose={() => setIsConnectionModalOpen(false)} onAdd={handleAddConnection} />
-      <AddJobModal isOpen={isJobModalOpen} onClose={() => { setIsJobModalOpen(false); setSelectedConnectionId(null); }} onAdd={handleAddJob} />
+      <AddJobModal isOpen={isJobModalOpen} onClose={() => { setIsJobModalOpen(false); setSelectedConnection(null); }} onAdd={handleAddJob} />
       <JobHistoryModal isOpen={isHistoryModalOpen} onClose={() => { setIsHistoryModalOpen(false); setSelectedJob(null); }} jobId={selectedJob?.job_id || null} />
       <EditJobModal isOpen={isEditJobModalOpen} onClose={() => { setIsEditJobModalOpen(false); setSelectedJob(null); }} onUpdate={handleUpdateJob} job={selectedJob} />
+      <EditConnectionNameModal isOpen={isEditConnectionModalOpen} onClose={() => { setIsEditConnectionModalOpen(false); setSelectedConnection(null); }} onUpdate={handleUpdateConnectionName} connection={selectedConnection} />
       <NotificationModal 
         isOpen={modalState.isOpen}
         title={modalState.title}
@@ -200,6 +116,7 @@ const Dashboard = () => {
         onConfirm={modalState.onConfirm}
       />
       
+      {/* ... (Struktur JSX lainnya tetap sama) ... */}
       <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', padding: '32px', fontFamily: 'sans-serif' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -216,7 +133,6 @@ const Dashboard = () => {
               This is your dashboard. Here you will be able to see and manage all your CRM backup jobs.
             </p>
           </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                 <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827' }}>Connections & Backup Jobs</h2>
@@ -228,12 +144,14 @@ const Dashboard = () => {
                 connections.map(conn => (
                   <div key={conn.connection_id} style={{ backgroundColor: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
-                        <div>
-                            <h3 style={{ fontSize: '18px', fontWeight: '600', textTransform: 'capitalize' }}>{conn.crm_type.replace('_', ' ')}</h3>
-                            <p style={{ fontSize: '14px', color: '#6b7280' }}>Connected on: {new Date(conn.created_at).toLocaleDateString()}</p>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                            <h3 style={{ fontSize: '18px', fontWeight: '600' }}>{conn.connection_name}</h3>
+                            <button onClick={() => openEditConnectionModal(conn)} style={{ padding: '2px 6px', fontSize: '10px', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}>
+                                Edit
+                            </button>
                         </div>
                         <div style={{display: 'flex', gap: '12px'}}>
-                            <button onClick={() => openJobModal(conn.connection_id)} style={{ padding: '6px 12px', fontSize: '14px', fontWeight: '500', color: '#4f46e5', backgroundColor: '#e0e7ff', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>
+                            <button onClick={() => openJobModal(conn)} style={{ padding: '6px 12px', fontSize: '14px', fontWeight: '500', color: '#4f46e5', backgroundColor: '#e0e7ff', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>
                                 + Add Job
                             </button>
                             <button onClick={() => handleDeleteConnection(conn.connection_id)} style={{ padding: '6px 12px', fontSize: '14px', fontWeight: '500', color: '#be123c', backgroundColor: '#fee2e2', borderRadius: '4px', border: 'none', cursor: 'pointer' }}>
@@ -241,7 +159,9 @@ const Dashboard = () => {
                             </button>
                         </div>
                     </div>
-                    
+                    <p style={{ fontSize: '14px', color: '#6b7280', textTransform: 'capitalize', marginTop: '-12px', marginBottom: '16px' }}>
+                        {conn.crm_type.replace('_', ' ')} - Connected on: {new Date(conn.created_at).toLocaleDateString()}
+                    </p>
                     {jobs[conn.connection_id] && jobs[conn.connection_id].length > 0 ? (
                       <ul style={{ listStyle: 'none', padding: 0, margin: 0, borderTop: '1px solid #e5e7eb' }}>
                         {jobs[conn.connection_id].map(job => (

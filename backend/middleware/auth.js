@@ -4,15 +4,24 @@
 const jwt = require('jsonwebtoken');
 
 module.exports = function(req, res, next) {
-  // 1. Ambil token dari header
-  const token = req.header('x-auth-token');
+  let token;
+  const authHeader = req.header('Authorization');
 
-  // 2. Cek jika tidak ada token
+  // Coba ambil token dari header 'Authorization' (untuk panggilan API biasa)
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } 
+  // Jika tidak ada, coba ambil dari query parameter (untuk alur redirect OAuth)
+  else if (req.query.token) {
+    token = req.query.token;
+  }
+
+  // Jika token tidak ditemukan di kedua tempat, tolak akses
   if (!token) {
     return res.status(401).json({ msg: 'Tidak ada token, otorisasi ditolak' });
   }
 
-  // 3. Verifikasi token
+  // Verifikasi token
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     

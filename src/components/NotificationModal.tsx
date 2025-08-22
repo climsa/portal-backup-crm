@@ -48,7 +48,7 @@ const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, title, me
               </button>
               <button
                 onClick={() => {
-                  onConfirm();
+                  if(onConfirm) onConfirm();
                   onClose();
                 }}
                 style={{ padding: '8px 16px', fontSize: '14px', fontWeight: '500', color: 'white', backgroundColor: '#dc2626', borderRadius: '4px', border: 'none', cursor: 'pointer' }}

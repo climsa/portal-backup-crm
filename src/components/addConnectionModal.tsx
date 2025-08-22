@@ -3,19 +3,23 @@ import React, { useState, ChangeEvent } from 'react';
 interface AddConnectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (crmType: string) => void;
+  onAdd: (details: { crmType: string; connectionName: string }) => void;
 }
 
 const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ isOpen, onClose, onAdd }) => {
   const [selectedCrm, setSelectedCrm] = useState<string>('zoho_crm');
+  const [connectionName, setConnectionName] = useState<string>('');
 
   if (!isOpen) {
     return null;
   }
 
   const handleAddClick = () => {
-    if (selectedCrm) {
-      onAdd(selectedCrm);
+    if (selectedCrm && connectionName) {
+      // Panggil fungsi onAdd yang diteruskan dari Dashboard
+      onAdd({ crmType: selectedCrm, connectionName });
+    } else {
+      alert('Please provide a name for the connection.');
     }
   };
 
@@ -24,6 +28,21 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ isOpen, onClose
       <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '100%', maxWidth: '450px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Add New CRM Connection</h2>
         
+        <div style={{ marginBottom: '16px' }}>
+          <label htmlFor="connection-name" style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '8px' }}>
+            Connection Name
+          </label>
+          <input
+            id="connection-name"
+            type="text"
+            value={connectionName}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setConnectionName(e.target.value)}
+            placeholder="e.g., Production Zoho Account"
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+            required
+          />
+        </div>
+
         <div>
           <label htmlFor="crm-type" style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '8px' }}>
             Select CRM Platform
@@ -35,9 +54,9 @@ const AddConnectionModal: React.FC<AddConnectionModalProps> = ({ isOpen, onClose
             style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '4px' }}
           >
             <option value="zoho_crm">Zoho CRM</option>
-            <option value="salesforce">Salesforce</option>
-            <option value="hubspot">HubSpot</option>
-            <option value="odoo">Odoo</option>
+            <option value="salesforce" disabled>Salesforce (Not Implemented)</option>
+            <option value="hubspot" disabled>HubSpot (Not Implemented)</option>
+            <option value="odoo" disabled>Odoo (Not Implemented)</option>
           </select>
         </div>
 
