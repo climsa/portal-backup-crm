@@ -28,7 +28,7 @@ router.get('/zoho_crm/connect', auth, (req, res) => {
   const statePayload = { clientId: req.client.id, connectionName: connectionName };
   const state = Buffer.from(JSON.stringify(statePayload)).toString('base64');
   const options = {
-    scope: 'ZohoCRM.bulk.ALL,ZohoCRM.settings.modules.READ',
+    scope: 'ZohoCRM.bulk.backup.ALL,ZohoCRM.settings.modules.READ',
     client_id: process.env.ZOHO_CLIENT_ID,
     response_type: 'code',
     redirect_uri: 'http://localhost:3000/api/auth/zoho/callback',

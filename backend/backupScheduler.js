@@ -39,7 +39,7 @@ const runBackupJob = async (job) => {
     const accessToken = await getZohoAccessToken(connection.encrypted_refresh_token);
 
     // 3. Panggil Zoho Data Backup API menggunakan api_domain dari database
-    const ZOHO_BACKUP_API_URL = `${connection.api_domain}/crm/v2/bulk/backup`;
+    const ZOHO_BACKUP_API_URL = `${connection.api_domain}/crm/bulk/v8/backup`;
     const config = {
       headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
     };
