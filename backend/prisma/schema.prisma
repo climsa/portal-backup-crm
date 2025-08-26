@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model backup_jobs {
+  job_id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id   String?          @db.Uuid
+  job_name        String           @db.VarChar(255)
+  schedule        String           @db.VarChar(50)
+  storage_region  String           @db.VarChar(50)
+  selected_data   Json?
+  is_active       Boolean?         @default(true)
+  created_at      DateTime?        @default(now()) @db.Timestamptz(6)
+  deleted_at      DateTime?        @db.Timestamptz(6)
+  crm_connections crm_connections? @relation(fields: [connection_id], references: [connection_id], onDelete: Cascade, onUpdate: NoAction)
+  job_history     job_history[]
+}
+
+model clients {
+  client_id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_name      String            @db.VarChar(255)
+  email             String            @unique @db.VarChar(255)
+  password_hash     String            @db.VarChar(255)
+  acronis_tenant_id String?           @db.Uuid
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  crm_connections   crm_connections[]
+}
+
+model crm_connections {
+  connection_id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id               String?       @db.Uuid
+  crm_type                String        @db.VarChar(50)
+  encrypted_refresh_token String
+  is_active               Boolean?      @default(true)
+  created_at              DateTime?     @default(now()) @db.Timestamptz(6)
+  connection_name         String        @db.VarChar(255)
+  api_domain              String?       @db.VarChar(255)
+  deleted_at              DateTime?     @db.Timestamptz(6)
+  backup_jobs             backup_jobs[]
+  clients                 clients?      @relation(fields: [client_id], references: [client_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([client_id, crm_type], map: "unique_client_crm_type")
+}
+
+model job_history {
+  log_id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  job_id              String?      @db.Uuid
+  status              String       @db.VarChar(50)
+  start_time          DateTime?    @db.Timestamptz(6)
+  end_time            DateTime?    @db.Timestamptz(6)
+  data_transferred_gb Decimal?     @db.Decimal(10, 2)
+  details             String?
+  backup_jobs         backup_jobs? @relation(fields: [job_id], references: [job_id], onDelete: Cascade, onUpdate: NoAction)
+}

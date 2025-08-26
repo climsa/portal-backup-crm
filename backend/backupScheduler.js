@@ -1,11 +1,10 @@
 // File: backupScheduler.js
-// Tujuan: Menjalankan tugas backup secara otomatis sesuai jadwal.
-
 const axios = require('axios');
-const db = require('./db');
+const prisma = require('./prisma');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 
-// Fungsi bantuan untuk mendapatkan access token baru dari refresh token
 const getZohoAccessToken = async (refreshToken) => {
   const ZOHO_TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
   const params = new URLSearchParams({
@@ -18,81 +17,128 @@ const getZohoAccessToken = async (refreshToken) => {
   return response.data.access_token;
 };
 
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 const runBackupJob = async (job) => {
+  // PERBAIKAN: Akses koneksi melalui job.crm_connections
+  const connection = job.crm_connections;
+  if (!connection) {
+    console.error(`[Scheduler] Connection data is missing for job: ${job.job_name}`);
+    return;
+  }
+
   console.log(`[Scheduler] Starting backup job: ${job.job_name} (ID: ${job.job_id})`);
   const startTime = new Date();
-  
+  let logEntry;
+
   try {
-    // 1. Dapatkan detail koneksi, TERMASUK api_domain
-    const connRes = await db.query("SELECT * FROM crm_connections WHERE connection_id = $1", [job.connection_id]);
-    if (connRes.rows.length === 0) {
-      throw new Error(`Connection not found for job ${job.job_id}`);
-    }
-    const connection = connRes.rows[0];
+    logEntry = await prisma.job_history.create({
+      data: {
+        job_id: job.job_id,
+        status: 'in_progress',
+        start_time: startTime,
+        details: 'Backup process has started...',
+      },
+    });
 
-    // Pastikan koneksi memiliki api_domain
-    if (!connection.api_domain) {
-        throw new Error(`API Domain is missing for connection ${connection.connection_id}. Please re-authenticate.`);
-    }
+    if (!connection.api_domain) throw new Error(`API Domain is missing.`);
 
-    // 2. Dapatkan access token baru
     const accessToken = await getZohoAccessToken(connection.encrypted_refresh_token);
+    const config = { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } };
 
-    // 3. Panggil Zoho Data Backup API menggunakan api_domain dari database
     const ZOHO_BACKUP_API_URL = `${connection.api_domain}/crm/bulk/v8/backup`;
-    const config = {
-      headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
-    };
-    
-    console.log(`[DEBUG] Making POST request to: ${ZOHO_BACKUP_API_URL}`);
-    
     const backupResponse = await axios.post(ZOHO_BACKUP_API_URL, {}, config);
-    
     const backupDetails = backupResponse.data.data[0].details;
-    console.log(`[Scheduler] Zoho backup initiated successfully. Details:`, backupDetails);
+    const backupJobId = backupDetails.id;
 
-    const endTime = new Date();
-    await db.query(
-      "INSERT INTO job_history (job_id, status, start_time, end_time, details) VALUES ($1, $2, $3, $4, $5)",
-      [job.job_id, 'success', startTime, endTime, `Backup initiated. Job ID: ${backupDetails.id}`]
-    );
+    let jobStatus = '';
+    let downloadLink = null;
+    const ZOHO_STATUS_CHECK_URL = `${connection.api_domain}/crm/bulk/v8/backup/${backupJobId}`;
+    
+    for (let i = 0; i < 30; i++) {
+      const statusResponse = await axios.get(ZOHO_STATUS_CHECK_URL, config);
+      jobStatus = statusResponse.data.data[0].status;
+      if (jobStatus === 'COMPLETED') {
+        downloadLink = statusResponse.data.data[0].links[0].href;
+        break;
+      }
+      if (jobStatus === 'FAILED') throw new Error('Zoho reported that the backup job failed.');
+      await delay(60000);
+    }
+
+    if (!downloadLink) throw new Error('Backup job timed out.');
+
+    const backupFilePath = path.join(__dirname, 'backups', `${backupJobId}.zip`);
+    if (!fs.existsSync(path.join(__dirname, 'backups'))) {
+        fs.mkdirSync(path.join(__dirname, 'backups'));
+    }
+    
+    const writer = fs.createWriteStream(backupFilePath);
+    const downloadResponse = await axios({ method: 'get', url: downloadLink, responseType: 'stream' });
+    downloadResponse.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+
+    await prisma.job_history.update({
+      where: { log_id: logEntry.log_id },
+      data: {
+        status: 'success',
+        end_time: new Date(),
+        details: `Backup completed and file saved to ${backupFilePath}`,
+      },
+    });
     console.log(`[Scheduler] Successfully logged success for job: ${job.job_name}`);
 
   } catch (error) {
-    const endTime = new Date();
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
-    await db.query(
-      "INSERT INTO job_history (job_id, status, start_time, end_time, details) VALUES ($1, $2, $3, $4, $5)",
-      [job.job_id, 'failed', startTime, endTime, `Error: ${errorMessage}`]
-    );
+    if (logEntry) {
+        await prisma.job_history.update({
+          where: { log_id: logEntry.log_id },
+          data: {
+            status: 'failed',
+            end_time: new Date(),
+            details: `Error: ${errorMessage}`,
+          },
+        });
+    }
     console.error(`[Scheduler] Failed to run job ${job.job_name}:`, errorMessage);
   }
 };
 
-// ... (sisa kode tetap sama) ...
 const runAllActiveJobs = async () => {
-    console.log('[Manual Trigger] Running backup check for all active jobs...');
-    const { rows: allJobsToRun } = await db.query("SELECT * FROM backup_jobs WHERE is_active = true");
+    // PERBAIKAN: Ubah 'connection' menjadi 'crm_connections'
+    const allJobsToRun = await prisma.backup_jobs.findMany({
+        where: { is_active: true, deleted_at: null },
+        include: { crm_connections: true },
+    });
     console.log(`[Manual Trigger] Found ${allJobsToRun.length} jobs to run.`);
     for (const job of allJobsToRun) {
       await runBackupJob(job);
     }
 };
+
 const startScheduler = () => {
   cron.schedule('0 2 * * *', async () => {
-    console.log('[Scheduler] Running daily backup check...');
-    const { rows: dailyJobs } = await db.query("SELECT * FROM backup_jobs WHERE schedule = 'daily' AND is_active = true");
+    const dailyJobs = await prisma.backup_jobs.findMany({ 
+        where: { schedule: 'daily', is_active: true, deleted_at: null },
+        include: { crm_connections: true }
+    });
     const today = new Date();
     let weeklyJobs = [];
     if (today.getDay() === 0) {
-        const { rows } = await db.query("SELECT * FROM backup_jobs WHERE schedule = 'weekly' AND is_active = true");
-        weeklyJobs = rows;
+        weeklyJobs = await prisma.backup_jobs.findMany({ 
+            where: { schedule: 'weekly', is_active: true, deleted_at: null },
+            include: { crm_connections: true }
+        });
     }
     const allJobsToRun = [...dailyJobs, ...weeklyJobs];
     for (const job of allJobsToRun) {
       await runBackupJob(job);
     }
   });
-  console.log('Backup scheduler has been started. Will run every day at 2:00 AM.');
+  console.log('Backup scheduler has been started.');
 };
+
 module.exports = { startScheduler, runAllActiveJobs, runBackupJob };

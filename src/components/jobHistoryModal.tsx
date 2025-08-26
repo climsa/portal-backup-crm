@@ -9,7 +9,7 @@ interface JobHistoryModalProps {
 
 interface JobHistoryLog {
   log_id: string;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'in_progress' | 'cancelled';
   start_time: string;
   end_time: string;
   data_transferred_gb: number;
@@ -28,13 +28,13 @@ const JobHistoryModal: React.FC<JobHistoryModalProps> = ({ isOpen, onClose, jobI
           const token = localStorage.getItem('token');
           const api = axios.create({
             baseURL: 'http://localhost:3000/api',
-            headers: { 'x-auth-token': token },
+            headers: { 'Authorization': `Bearer ${token}` },
           });
           const res = await api.get('/history', { params: { jobId } });
           setHistory(res.data);
         } catch (error) {
           console.error('Failed to fetch job history:', error);
-          alert('Failed to fetch history.');
+          // Alert dihilangkan dari sini
         } finally {
           setLoading(false);
         }

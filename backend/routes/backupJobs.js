@@ -1,123 +1,125 @@
 // File: routes/backupJobs.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const prisma = require('../prisma');
 const auth = require('../middleware/auth');
-const { runBackupJob } = require('../backupScheduler'); // Impor fungsi backup
+const { runBackupJob } = require('../backupScheduler');
 
-// GET /api/jobs/:id - Mengambil detail satu tugas backup
-router.get('/:id', auth, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { rows } = await db.query("SELECT * FROM backup_jobs WHERE job_id = $1", [id]);
-        if (rows.length === 0) {
-            return res.status(404).json({ msg: 'Tugas backup tidak ditemukan' });
-        }
-        res.status(200).json(rows[0]);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
-    }
-});
-
-// PUT /api/jobs/:id - Memperbarui konfigurasi tugas backup (TERMASUK START/STOP)
-router.put('/:id', auth, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { job_name, schedule, is_active } = req.body;
-
-        if (job_name === undefined || schedule === undefined || is_active === undefined) {
-            return res.status(400).json({ msg: 'Harap sediakan job_name, schedule, dan is_active.' });
-        }
-
-        const updatedJob = await db.query(
-            "UPDATE backup_jobs SET job_name = $1, schedule = $2, is_active = $3 WHERE job_id = $4 RETURNING *",
-            [job_name, schedule, is_active, id]
-        );
-
-        if (updatedJob.rows.length === 0) {
-            return res.status(404).json({ msg: 'Tugas backup tidak ditemukan' });
-        }
-
-        res.status(200).json(updatedJob.rows[0]);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
-    }
-});
-
-// DELETE /api/jobs/:id - Menghapus sebuah tugas backup
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deleteOp = await db.query("DELETE FROM backup_jobs WHERE job_id = $1", [id]);
-    if (deleteOp.rowCount === 0) {
-      return res.status(404).json({ msg: 'Tugas backup tidak ditemukan' });
-    }
-    res.status(200).json({ msg: 'Tugas backup berhasil dihapus' });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
-
+// ... (Endpoint POST, GET, PUT, DELETE, CANCEL tetap sama) ...
 router.post('/', auth, async (req, res) => {
   const { connection_id, job_name, schedule, storage_region, selected_data } = req.body;
   if (!connection_id || !job_name || !schedule || !storage_region) {
     return res.status(400).json({ msg: 'Harap sediakan semua field yang diperlukan.' });
   }
   try {
-    const newJob = await db.query(
-      "INSERT INTO backup_jobs (connection_id, job_name, schedule, storage_region, selected_data) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [connection_id, job_name, schedule, storage_region, selected_data || null]
-    );
-    res.status(201).json(newJob.rows[0]);
+    const newJob = await prisma.backup_jobs.create({
+      data: {
+        connection_id,
+        job_name,
+        schedule,
+        storage_region,
+        selected_data: selected_data || {},
+      },
+    });
+    res.status(201).json(newJob);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
   }
 });
-
 router.get('/', auth, async (req, res) => {
   const { connectionId } = req.query;
   if (!connectionId) {
     return res.status(400).json({ msg: 'Parameter connectionId diperlukan.' });
   }
   try {
-    const { rows } = await db.query("SELECT * FROM backup_jobs WHERE connection_id = $1 ORDER BY created_at DESC", [connectionId]);
-    res.status(200).json(rows);
+    const jobs = await prisma.backup_jobs.findMany({
+      where: {
+        connection_id: connectionId,
+        deleted_at: null,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    res.status(200).json(jobs);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
   }
 });
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { job_name, schedule, is_active } = req.body;
+    if (job_name === undefined || schedule === undefined || is_active === undefined) {
+      return res.status(400).json({ msg: 'Harap sediakan job_name, schedule, dan is_active.' });
+    }
+    const updatedJob = await prisma.backup_jobs.update({
+      where: { job_id: id },
+      data: { job_name, schedule, is_active },
+    });
+    res.status(200).json(updatedJob);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.backup_jobs.update({
+      where: { job_id: id },
+      data: { deleted_at: new Date() },
+    });
+    res.status(200).json({ msg: 'Tugas backup berhasil dihapus' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+router.post('/:id/cancel', auth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const runningJob = await prisma.job_history.findFirst({
+            where: {
+                job_id: id,
+                status: 'in_progress',
+            },
+            orderBy: { start_time: 'desc' },
+        });
+        if (!runningJob) {
+            return res.status(404).json({ msg: 'Tidak ada pekerjaan yang sedang berjalan untuk dibatalkan.' });
+        }
+        await prisma.job_history.update({
+            where: { log_id: runningJob.log_id },
+            data: { status: 'cancelled', details: 'Job cancelled by user.' },
+        });
+        res.status(200).json({ msg: 'Permintaan pembatalan pekerjaan telah dikirim.' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
-
-// === ENDPOINT BARU UNTUK MEMICU BACKUP ===
-
-/**
- * @route   POST /api/jobs/:id/run
- * @desc    Memicu eksekusi pekerjaan backup secara manual
- * @access  Private
- */
 router.post('/:id/run', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { rows } = await db.query("SELECT * FROM backup_jobs WHERE job_id = $1", [id]);
+    // PERBAIKAN: Ubah 'connection' menjadi 'crm_connections'
+    const jobToRun = await prisma.backup_jobs.findUnique({
+      where: { job_id: id },
+      include: { crm_connections: true },
+    });
 
-    if (rows.length === 0) {
+    if (!jobToRun) {
       return res.status(404).json({ msg: 'Pekerjaan backup tidak ditemukan' });
     }
-
-    const jobToRun = rows[0];
 
     // Panggil fungsi backup (jangan tunggu selesai karena berjalan di latar belakang)
     runBackupJob(jobToRun);
 
-    res.status(202).json({ msg: `Backup job '${jobToRun.job_name}' has been triggered successfully. Check server logs for progress.` });
-
+    res.status(202).json({ msg: `Backup job '${jobToRun.job_name}' has been triggered successfully.` });
+    
   } catch (err) {
-    console.error(err.message);
+    console.error('[API] CRITICAL ERROR in /jobs/:id/run:', err);
     res.status(500).send('Server Error');
   }
 });

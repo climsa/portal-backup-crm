@@ -6,7 +6,6 @@
 const express = require('express');
 const cors = require('cors'); // Impor pustaka CORS
 require('dotenv').config(); // Muat variabel dari file .env
-const db = require('./db');
 const { startScheduler, runAllActiveJobs } = require('./backupScheduler'); // Impor kedua fungsi
 
 // Impor file rute
@@ -60,6 +59,6 @@ app.listen(PORT, () => {
   // startScheduler();
 
   // Jalankan semua pekerjaan backup sekarang untuk tujuan pengujian
-  console.log('Triggering initial backup run for testing...');
-  runAllActiveJobs();
+  // console.log('Triggering initial backup run for testing...');
+  // runAllActiveJobs();
 });

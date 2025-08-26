@@ -1,7 +1,7 @@
 // File: routes/jobHistory.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const prisma = require('../prisma');
 const auth = require('../middleware/auth');
 
 router.get('/', auth, async (req, res) => {
@@ -10,11 +10,11 @@ router.get('/', auth, async (req, res) => {
     return res.status(400).json({ msg: 'Parameter jobId diperlukan.' });
   }
   try {
-    const { rows } = await db.query(
-      "SELECT * FROM job_history WHERE job_id = $1 ORDER BY start_time DESC",
-      [jobId]
-    );
-    res.status(200).json(rows);
+    const history = await prisma.job_history.findMany({
+      where: { job_id: jobId },
+      orderBy: { start_time: 'desc' },
+    });
+    res.status(200).json(history);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
