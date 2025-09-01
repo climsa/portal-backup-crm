@@ -32,66 +32,123 @@ const runBackupJob = async (job) => {
   let logEntry;
 
   try {
+    // logEntry = await prisma.job_history.create({
+    //   data: {
+    //     job_id: job.job_id,
+    //     status: 'in_progress',
+    //     start_time: startTime,
+    //     details: 'Backup process has started...',
+    //   },
+    // });
+
+    // if (!connection.api_domain) throw new Error(`API Domain is missing.`);
+
+    // const accessToken = await getZohoAccessToken(connection.encrypted_refresh_token);
+    // const config = { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } };
+
+    // const ZOHO_BACKUP_API_URL = `${connection.api_domain}/crm/bulk/v8/backup`;
+    // const backupResponse = await axios.post(ZOHO_BACKUP_API_URL, {}, config);
+    // const backupDetails = backupResponse.data.data[0].details;
+    // const backupJobId = backupDetails.id;
+
+    // let jobStatus = '';
+    // let downloadLink = null;
+    // const ZOHO_STATUS_CHECK_URL = `${connection.api_domain}/crm/bulk/v8/backup/${backupJobId}`;
+    
+    // for (let i = 0; i < 30; i++) {
+    //   const statusResponse = await axios.get(ZOHO_STATUS_CHECK_URL, config);
+    //   jobStatus = statusResponse.data.data[0].status;
+    //   if (jobStatus === 'COMPLETED') {
+    //     downloadLink = statusResponse.data.data[0].links[0].href;
+    //     break;
+    //   }
+    //   if (jobStatus === 'FAILED') throw new Error('Zoho reported that the backup job failed.');
+    //   await delay(60000);
+    // }
+
+    // if (!downloadLink) throw new Error('Backup job timed out.');
+
+  //   const backupFilePath = path.join(__dirname, 'backups', `${backupJobId}.zip`);
+  //   if (!fs.existsSync(path.join(__dirname, 'backups'))) {
+  //       fs.mkdirSync(path.join(__dirname, 'backups'));
+  //   }
+    
+  //   const writer = fs.createWriteStream(backupFilePath);
+  //   const downloadResponse = await axios({ method: 'get', url: downloadLink, responseType: 'stream' });
+  //   downloadResponse.data.pipe(writer);
+  //   await new Promise((resolve, reject) => {
+  //       writer.on('finish', resolve);
+  //       writer.on('error', reject);
+  //   });
+
+  //   await prisma.job_history.update({
+  //     where: { log_id: logEntry.log_id },
+  //     data: {
+  //       status: 'success',
+  //       end_time: new Date(),
+  //       details: `Backup completed and file saved to ${backupFilePath}`,
+  //     },
+  //   });
+  //   console.log(`[Scheduler] Successfully logged success for job: ${job.job_name}`);
+
+  // } catch (error) {
+  //   const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+  //   if (logEntry) {
+  //       await prisma.job_history.update({
+  //         where: { log_id: logEntry.log_id },
+  //         data: {
+  //           status: 'failed',
+  //           end_time: new Date(),
+  //           details: `Error: ${errorMessage}`,
+  //         },
+  //       });
+  //   }
+  //   console.error(`[Scheduler] Failed to run job ${job.job_name}:`, errorMessage);
+  // }
+
+  
+  // 1. Buat entri log 'in_progress' (ini tetap sama)
     logEntry = await prisma.job_history.create({
       data: {
         job_id: job.job_id,
         status: 'in_progress',
         start_time: startTime,
-        details: 'Backup process has started...',
+        details: 'Local test backup process has started...',
       },
     });
 
-    if (!connection.api_domain) throw new Error(`API Domain is missing.`);
+  console.log('[Scheduler] Simulating backup process using local sample file.');
+    await delay(5000); // Tambahkan jeda 5 detik untuk mensimulasikan proses
 
-    const accessToken = await getZohoAccessToken(connection.encrypted_refresh_token);
-    const config = { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } };
-
-    const ZOHO_BACKUP_API_URL = `${connection.api_domain}/crm/bulk/v8/backup`;
-    const backupResponse = await axios.post(ZOHO_BACKUP_API_URL, {}, config);
-    const backupDetails = backupResponse.data.data[0].details;
-    const backupJobId = backupDetails.id;
-
-    let jobStatus = '';
-    let downloadLink = null;
-    const ZOHO_STATUS_CHECK_URL = `${connection.api_domain}/crm/bulk/v8/backup/${backupJobId}`;
+    const sourceFilePath = path.join(__dirname, 'sample_data', 'sample_backup.zip');
+    const destinationFolder = path.join(__dirname, 'backups');
+    const destinationFilePath = path.join(destinationFolder, `sample_backup_${job.job_id}.zip`);
     
-    for (let i = 0; i < 30; i++) {
-      const statusResponse = await axios.get(ZOHO_STATUS_CHECK_URL, config);
-      jobStatus = statusResponse.data.data[0].status;
-      if (jobStatus === 'COMPLETED') {
-        downloadLink = statusResponse.data.data[0].links[0].href;
-        break;
-      }
-      if (jobStatus === 'FAILED') throw new Error('Zoho reported that the backup job failed.');
-      await delay(60000);
+    if (!fs.existsSync(sourceFilePath)) {
+        throw new Error('File sample_backup.zip tidak ditemukan di folder sample_data.');
     }
-
-    if (!downloadLink) throw new Error('Backup job timed out.');
-
-    const backupFilePath = path.join(__dirname, 'backups', `${backupJobId}.zip`);
-    if (!fs.existsSync(path.join(__dirname, 'backups'))) {
-        fs.mkdirSync(path.join(__dirname, 'backups'));
+    if (!fs.existsSync(destinationFolder)) {
+        fs.mkdirSync(destinationFolder);
     }
     
-    const writer = fs.createWriteStream(backupFilePath);
-    const downloadResponse = await axios({ method: 'get', url: downloadLink, responseType: 'stream' });
-    downloadResponse.data.pipe(writer);
-    await new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
+    // Salin file sampel ke folder tujuan
+    fs.copyFileSync(sourceFilePath, destinationFilePath);
+    console.log(`[Scheduler] Sample file copied to ${destinationFilePath}`);
+    // --- AKHIR DARI BAGIAN PENGUJIAN LOKAL ---
 
+    // 2. Perbarui entri log menjadi 'success' (ini tetap sama)
     await prisma.job_history.update({
       where: { log_id: logEntry.log_id },
       data: {
         status: 'success',
         end_time: new Date(),
-        details: `Backup completed and file saved to ${backupFilePath}`,
+        details: `Local test backup completed. File saved to ${destinationFilePath}`,
       },
     });
     console.log(`[Scheduler] Successfully logged success for job: ${job.job_name}`);
 
   } catch (error) {
+    // 3. Tangani error dan perbarui log menjadi 'failed' (ini tetap sama)
     const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
     if (logEntry) {
         await prisma.job_history.update({

@@ -1,64 +1,43 @@
 // File: server.js
-// Tujuan: Titik masuk utama untuk aplikasi backend, membuat server Express,
-// dan menghubungkan semua file rute.
-
-// Impor pustaka yang diperlukan
+require('dotenv').config();
 const express = require('express');
-const cors = require('cors'); // Impor pustaka CORS
-require('dotenv').config(); // Muat variabel dari file .env
-const { startScheduler, runAllActiveJobs } = require('./backupScheduler'); // Impor kedua fungsi
+const cors = require('cors');
+const { startScheduler, runAllActiveJobs } = require('./backupScheduler');
 
-// Impor file rute
-const authRoutes = require('./routes/auth');
-const clientRoutes = require('./routes/clients');
-const crmConnectionRoutes = require('./routes/crmConnections');
-const backupJobRoutes = require('./routes/backupJobs');
-const jobHistoryRoutes = require('./routes/jobHistory');
-const zohoRoutes = require('./routes/zoho');
-
-// Inisialisasi aplikasi Express
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// ====================================================================
-// MIDDLEWARE
-// ====================================================================
-
-// Aktifkan CORS untuk semua rute
-// Ini akan mengizinkan permintaan dari origin (domain/port) yang berbeda
+// Init Middleware
 app.use(cors());
+app.use(express.json({ extended: false }));
 
-app.use(express.json());
+// Define Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/connections', require('./routes/crmConnections'));
+app.use('/api/jobs', require('./routes/backupJobs'));
+app.use('/api/history', require('./routes/jobHistory'));
+app.use('/api/zoho', require('./routes/zoho'));
+app.use('/api/backups', require('./routes/backups')); // Tambahkan rute baru ini
 
-// ====================================================================
-// API ROUTES (ENDPOINT)
-// ====================================================================
-
-app.get('/', (req, res) => {
-  res.send('Selamat datang di API Portal Backup CRM!');
-});
-
-// Gunakan rute untuk otentikasi
-app.use('/api/auth', authRoutes);
-
-// Gunakan rute lainnya
-app.use('/api/clients', clientRoutes);
-app.use('/api/connections', crmConnectionRoutes);
-app.use('/api/jobs', backupJobRoutes);
-app.use('/api/history', jobHistoryRoutes);
-app.use('/api/zoho', zohoRoutes);
-
-// ====================================================================
-// SERVER LISTENER
-// ====================================================================
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server backend berjalan di http://localhost:${PORT}`);
-  
-  // Mulai scheduler setelah server berhasil berjalan
+  // Jalankan penjadwal
   // startScheduler();
-
-  // Jalankan semua pekerjaan backup sekarang untuk tujuan pengujian
+  // Pemicu awal untuk pengujian (bisa di-comment out)
   // console.log('Triggering initial backup run for testing...');
   // runAllActiveJobs();
 });
+
+// Koneksi ke DB
+const prisma = require('./prisma');
+prisma.$connect()
+  .then(() => {
+    console.log(`Successfully connected to PostgreSQL database at: ${new Date().toISOString()}`);
+  })
+  .catch((e) => {
+    console.error('Failed to connect to the database', e);
+    process.exit(1);
+  });
+
