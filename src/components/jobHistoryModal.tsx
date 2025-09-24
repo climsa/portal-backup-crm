@@ -1,6 +1,7 @@
 // File: src/components/JobHistoryModal.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { BackupJob, JobHistory } from '../types'; 
 
 interface JobHistoryModalProps {
   isOpen: boolean;

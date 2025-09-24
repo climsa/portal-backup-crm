@@ -130,21 +130,27 @@ const Dashboard = () => {
     }, [jobs, fetchData]);
     
     // --- Handler Aksi Pengguna ---
-    const handleAddConnection = (crmType: string, connectionName: string) => {
+    const handleAddConnection = ({ crmType, connectionName }: { crmType: string; connectionName: string }) => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert("Token tidak ditemukan. Silakan login ulang.");
+            return;
+        }
         const existingConnection = connections.find(c => c.crm_type === crmType);
+        const url = `http://localhost:3000/api/auth/${crmType}/connect?token=${token}&connectionName=${encodeURIComponent(connectionName)}`;
+
         if (existingConnection) {
             showConfirmation(
                 `A connection for ${crmType.replace('_', ' ')} already exists. Do you want to re-authenticate and update it?`,
                 () => {
-                    const token = localStorage.getItem('token');
-                    window.location.href = `http://localhost:3000/api/auth/${crmType}/connect?token=${token}&connectionName=${encodeURIComponent(connectionName)}`;
+                window.location.href = url;
                 }
             );
         } else {
-            const token = localStorage.getItem('token');
-            window.location.href = `http://localhost:3000/api/auth/${crmType}/connect?token=${token}&connectionName=${encodeURIComponent(connectionName)}`;
+            window.location.href = url;
         }
     };
+
     
     const handleAddJob = async (jobDetails: { job_name: string; schedule: string; metadata: any }) => {
         if (!selectedConnectionId) return;
@@ -162,7 +168,7 @@ const Dashboard = () => {
         }
     };
 
-    const handleEditJob = async (jobDetails: { job_name: string; schedule: string; }) => {
+    const handleEditJob = async (jobId: string, jobDetails: { job_name: string; schedule: string; selected_data: { modules: string[] } }) => {
         if (!selectedJob) return;
         try {
             const token = localStorage.getItem('token');
@@ -177,7 +183,7 @@ const Dashboard = () => {
         }
     };
 
-    const handleEditConnectionName = async (newName: string) => {
+    const handleEditConnectionName = async (id: string, newName: string) => {
         if (!selectedConnection) return;
         try {
             const token = localStorage.getItem('token');
@@ -267,7 +273,7 @@ const Dashboard = () => {
         <AddJobModal isOpen={isAddJobModalOpen} onClose={() => setIsAddJobModalOpen(false)} onAdd={handleAddJob} connectionId={selectedConnectionId} />
         {selectedJob && <JobHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} jobId={selectedJob.job_id} />}
         {selectedJob && <EditJobModal isOpen={isEditJobModalOpen} onClose={() => setIsEditJobModalOpen(false)} onSave={handleEditJob} job={selectedJob} />}
-        {selectedConnection && <EditConnectionNameModal isOpen={isEditConnectionNameModalOpen} onClose={() => setIsEditConnectionNameModalOpen(false)} onSave={handleEditConnectionName} connection={selectedConnection} />}
+        {selectedConnection && <EditConnectionNameModal isOpen={isEditConnectionNameModalOpen} onClose={() => setIsEditConnectionNameModalOpen(false)} onUpdate={handleEditConnectionName} connection={selectedConnection} />}
 
         <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', padding: '32px', fontFamily: 'sans-serif' }}>
             <div style={{ maxWidth: '1280px', margin: '0 auto' }}>

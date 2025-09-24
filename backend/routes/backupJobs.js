@@ -5,24 +5,18 @@ const prisma = require('../prisma');
 const auth = require('../middleware/auth');
 const { runBackupJob, cancelBackupJob } = require('../backupScheduler');
 
-/**
- * Mengambil semua pekerjaan backup milik klien yang sedang login.
- * clientId diambil dari token otentikasi.
- */
+// Mengambil semua pekerjaan backup milik klien yang sedang login
 router.get('/', auth, async (req, res) => {
-  const clientId = req.client.id; // Menggunakan clientId dari token
-
+  const clientId = req.client.id;
   try {
     const jobs = await prisma.backup_jobs.findMany({
       where: {
-        crm_connections: { // Memfilter berdasarkan relasi ke crm_connections
+        crm_connections: {
           client_id: clientId,
         },
-        deleted_at: null, // Hanya ambil yang tidak di-soft delete
+        deleted_at: null,
       },
-      orderBy: {
-        created_at: 'desc',
-      },
+      orderBy: { created_at: 'desc' },
     });
     res.status(200).json(jobs);
   } catch (error) {
@@ -31,57 +25,45 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-/**
- * Membuat pekerjaan backup baru.
- */
+// Membuat pekerjaan backup baru
 router.post('/', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
-    const { connection_id, job_name, schedule, metadata } = req.body;
-    try {
-        const newJob = await prisma.backup_jobs.create({
-            data: {
-                connection_id,
-                job_name,
-                schedule,
-                metadata: metadata || {},
-                is_active: true,
-            },
-        });
-        res.status(201).json(newJob);
-    } catch (error) {
-        console.error('[API] Error creating backup job:', error);
-        res.status(500).send('Server Error');
+  console.log('[API] Received request to create new job. Body:', req.body);
+  const { connection_id, job_name, schedule, selected_data } = req.body;
+  
+  try {
+    if (!connection_id || !job_name || !schedule) {
+        console.error('[API] Validation failed: Missing required fields.');
+        return res.status(400).json({ msg: 'Connection ID, job name, and schedule are required.' });
     }
+
+    const newJob = await prisma.backup_jobs.create({
+      data: {
+        job_name,
+        schedule,
+        // PERBAIKAN: Menggunakan `selected_data` sesuai dengan skema Prisma
+        selected_data: selected_data || {},
+        is_active: true,
+        storage_region: 'sg',
+        crm_connections: {
+          connect: {
+            connection_id: connection_id,
+          },
+        },
+      },
+    });
+    console.log('[API] Job created successfully:', newJob);
+    res.status(201).json(newJob);
+  } catch (error) {
+    console.error('[API] CRITICAL ERROR creating backup job:', error);
+    res.status(500).send('Server Error');
+  }
 });
 
-
-/**
- * Mengambil detail satu pekerjaan backup.
- */
-router.get('/:id', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
-    const { id } = req.params;
-    try {
-        const job = await prisma.backup_jobs.findUnique({
-            where: { job_id: id },
-        });
-        if (!job) {
-            return res.status(404).json({ msg: 'Job not found' });
-        }
-        res.status(200).json(job);
-    } catch (error) {
-        console.error(`[API] Error fetching job ${id}:`, error);
-        res.status(500).send('Server Error');
-    }
-});
-
-/**
- * Memperbarui pekerjaan backup (nama, jadwal, status aktif).
- */
+// Memperbarui pekerjaan backup
 router.put('/:id', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
     const { id } = req.params;
-    const { job_name, schedule, is_active } = req.body;
+    // PERBAIKAN: Menggunakan `selected_data` saat update juga
+    const { job_name, schedule, is_active, selected_data } = req.body;
     try {
         const updatedJob = await prisma.backup_jobs.update({
             where: { job_id: id },
@@ -89,6 +71,7 @@ router.put('/:id', auth, async (req, res) => {
                 job_name,
                 schedule,
                 is_active,
+                selected_data, // PERBAIKAN
             },
         });
         res.status(200).json(updatedJob);
@@ -98,11 +81,9 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-/**
- * Melakukan soft delete pada pekerjaan backup.
- */
+
+// Melakukan soft delete pada pekerjaan backup
 router.delete('/:id', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
     const { id } = req.params;
     try {
         await prisma.backup_jobs.update({
@@ -116,13 +97,8 @@ router.delete('/:id', auth, async (req, res) => {
     }
 });
 
-// --- Rute Aksi ---
-
-/**
- * Memicu pekerjaan backup untuk berjalan sekarang.
- */
+// Memicu pekerjaan backup untuk berjalan sekarang
 router.post('/:id/run', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
     const { id } = req.params;
     console.log(`[API] Received request to run job ID: ${id}`);
     try {
@@ -138,7 +114,7 @@ router.post('/:id/run', auth, async (req, res) => {
         }
         
         console.log('[API] Job found, triggering backup...');
-        runBackupJob(jobToRun); // Tidak perlu await karena ini proses asinkron
+        runBackupJob(jobToRun);
         
         res.status(202).json({ msg: 'Backup job has been triggered.' });
     } catch (error) {
@@ -147,11 +123,8 @@ router.post('/:id/run', auth, async (req, res) => {
     }
 });
 
-/**
- * Membatalkan pekerjaan backup yang sedang berjalan.
- */
+// Membatalkan pekerjaan backup yang sedang berjalan
 router.post('/:id/cancel', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
     const { id } = req.params;
     try {
         await cancelBackupJob(id);
@@ -162,11 +135,8 @@ router.post('/:id/cancel', auth, async (req, res) => {
     }
 });
 
-/**
- * Memicu ulang pekerjaan yang gagal.
- */
+// Memicu ulang pekerjaan yang gagal
 router.post('/:id/retry', auth, async (req, res) => {
-    // ... (sisa kode tidak berubah)
     const { id } = req.params;
     try {
         const jobToRun = await prisma.backup_jobs.findUnique({
@@ -187,5 +157,5 @@ router.post('/:id/retry', auth, async (req, res) => {
     }
 });
 
-module.exports = router;
 
+module.exports = router;
