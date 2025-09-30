@@ -39,6 +39,16 @@ export default tseslint.config([
 ])
 ```
 
+## Environment Variables
+
+- Frontend (Vite): copy `.env.example` to `.env` and set
+  - `VITE_API_BASE_URL` (e.g., `http://localhost:3000/api`)
+- Backend (Express): copy `backend/.env.example` to `backend/.env` and set
+  - `FRONTEND_BASE_URL` (e.g., `http://localhost:5173`)
+  - `API_BASE_URL` (e.g., `http://localhost:3000/api`)
+  - `JWT_SECRET`, `DATABASE_URL`, and `ZOHO_*` (Client ID/Secret/Scope) accordingly
+
+
 You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js

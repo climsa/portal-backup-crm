@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
@@ -9,11 +9,13 @@ import EditJobModal from './EditJobModal';
 import EditConnectionNameModal from './EditConnectionNameModal';
 import NotificationModal from './NotificationModal';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+
 // --- Tipe Data ---
 interface DecodedToken { client: { id: string; }; }
 interface ClientData { client_id: string; company_name: string; }
 interface CrmConnection { connection_id: string; crm_type: string; connection_name: string; created_at: string; }
-interface BackupJob { job_id: string; connection_id: string; job_name: string; schedule: string; is_active: boolean; }
+interface BackupJob { job_id: string; connection_id: string; job_name: string; schedule: string; is_active: boolean; selected_data: { modules?: string[] } }
 interface JobHistory { history_id: string; status: string; started_at: string; file_path?: string; }
 interface JobWithHistory extends BackupJob { latest_history?: JobHistory; }
 interface NotificationState { isOpen: boolean; message: string; type: 'success' | 'error' | 'confirm'; onConfirm?: () => void; }
@@ -61,7 +63,7 @@ const Dashboard = () => {
             const decoded = jwtDecode<DecodedToken>(token);
             const clientId = decoded.client.id;
             const api = axios.create({
-                baseURL: 'http://localhost:3000/api',
+                baseURL: API_BASE_URL,
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -75,7 +77,9 @@ const Dashboard = () => {
             setClient(clientRes.data);
             setConnections(connectionsRes.data);
 
-            const latestHistories = new Map(historyRes.data.map((h: JobHistory & { job_id: string }) => [h.job_id, h]));
+            const latestHistoriesArray = (historyRes.data as Array<JobHistory & { job_id: string }>)
+                .map((h) => [h.job_id, h] as [string, JobHistory]);
+            const latestHistories = new Map<string, JobHistory>(latestHistoriesArray);
 
             const jobsByConnection: { [key: string]: JobWithHistory[] } = {};
             connectionsRes.data.forEach((conn: CrmConnection) => {
@@ -137,7 +141,7 @@ const Dashboard = () => {
             return;
         }
         const existingConnection = connections.find(c => c.crm_type === crmType);
-        const url = `http://localhost:3000/api/auth/${crmType}/connect?token=${token}&connectionName=${encodeURIComponent(connectionName)}`;
+        const url = `${API_BASE_URL}/auth/${crmType}/connect?token=${token}&connectionName=${encodeURIComponent(connectionName)}`;
 
         if (existingConnection) {
             showConfirmation(
@@ -152,18 +156,18 @@ const Dashboard = () => {
     };
 
     
-    const handleAddJob = async (jobDetails: { job_name: string; schedule: string; metadata: any }) => {
+    const handleAddJob = async (jobDetails: { job_name: string; schedule: string; selected_data: { modules: string[] } }) => {
         if (!selectedConnectionId) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.post('http://localhost:3000/api/jobs', {
+            await axios.post(`${API_BASE_URL}/jobs`, {
                 connection_id: selectedConnectionId,
                 ...jobDetails
             }, { headers: { 'Authorization': `Bearer ${token}` } });
             showNotification(`Backup job "${jobDetails.job_name}" added successfully!`);
             setIsAddJobModalOpen(false);
             fetchData();
-        } catch (error) {
+        } catch {
             showNotification('Failed to add new backup job.', 'error');
         }
     };
@@ -172,13 +176,13 @@ const Dashboard = () => {
         if (!selectedJob) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`http://localhost:3000/api/jobs/${selectedJob.job_id}`, jobDetails, {
+            await axios.put(`${API_BASE_URL}/jobs/${jobId}`, jobDetails, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             showNotification('Job updated successfully!');
             setIsEditJobModalOpen(false);
             fetchData();
-        } catch (error) {
+        } catch {
             showNotification('Failed to update job.', 'error');
         }
     };
@@ -187,13 +191,13 @@ const Dashboard = () => {
         if (!selectedConnection) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`http://localhost:3000/api/connections/${selectedConnection.connection_id}`, {
+            await axios.put(`${API_BASE_URL}/connections/${id}`, {
                 connection_name: newName
             }, { headers: { 'Authorization': `Bearer ${token}` } });
             showNotification('Connection name updated successfully!');
             setIsEditConnectionNameModalOpen(false);
             fetchData();
-        } catch (error) {
+        } catch {
             showNotification('Failed to update connection name.', 'error');
         }
     };
@@ -202,12 +206,12 @@ const Dashboard = () => {
         showConfirmation('Are you sure you want to delete this connection? All associated backup jobs will also be deleted.', async () => {
             try {
                 const token = localStorage.getItem('token');
-                await axios.delete(`http://localhost:3000/api/connections/${connectionId}`, {
+                await axios.delete(`${API_BASE_URL}/connections/${connectionId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 showNotification('Connection deleted successfully.');
                 fetchData();
-            } catch (error) {
+            } catch {
                 showNotification('Failed to delete connection.', 'error');
             }
         });
@@ -217,12 +221,12 @@ const Dashboard = () => {
         showConfirmation('Are you sure you want to delete this backup job?', async () => {
             try {
                 const token = localStorage.getItem('token');
-                await axios.delete(`http://localhost:3000/api/jobs/${jobId}`, {
+                await axios.delete(`${API_BASE_URL}/jobs/${jobId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 showNotification('Backup job deleted successfully.');
                 fetchData();
-            } catch (error) {
+            } catch {
                 showNotification('Failed to delete backup job.', 'error');
             }
         });
@@ -231,20 +235,20 @@ const Dashboard = () => {
     const handleToggleJobStatus = async (job: BackupJob) => {
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`http://localhost:3000/api/jobs/${job.job_id}`, {
+            await axios.put(`${API_BASE_URL}/jobs/${job.job_id}`, {
                 is_active: !job.is_active
             }, { headers: { 'Authorization': `Bearer ${token}` } });
             showNotification(`Job status updated to ${!job.is_active ? 'Active' : 'Inactive'}.`);
             fetchData();
-        } catch (error) {
+        } catch {
             showNotification('Failed to update job status.', 'error');
         }
     };
 
-    const triggerJobAction = async (jobId: string, action: 'run' | 'cancel' | 'retry') => {
+    const triggerJobAction = async (jobId: string, action: 'run' | 'cancel' | 'retry' | 'restore') => {
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`http://localhost:3000/api/jobs/${jobId}/${action}`, {}, {
+            await axios.post(`${API_BASE_URL}/jobs/${jobId}/${action}`, {}, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             showNotification(`Job action '${action}' triggered successfully.`);
@@ -270,7 +274,7 @@ const Dashboard = () => {
             onConfirm={notification.onConfirm}
         />
         <AddConnectionModal isOpen={isAddConnectionModalOpen} onClose={() => setIsAddConnectionModalOpen(false)} onAdd={handleAddConnection} />
-        <AddJobModal isOpen={isAddJobModalOpen} onClose={() => setIsAddJobModalOpen(false)} onAdd={handleAddJob} connectionId={selectedConnectionId} />
+        <AddJobModal isOpen={isAddJobModalOpen} onClose={() => setIsAddJobModalOpen(false)} onAdd={handleAddJob} />
         {selectedJob && <JobHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} jobId={selectedJob.job_id} />}
         {selectedJob && <EditJobModal isOpen={isEditJobModalOpen} onClose={() => setIsEditJobModalOpen(false)} onSave={handleEditJob} job={selectedJob} />}
         {selectedConnection && <EditConnectionNameModal isOpen={isEditConnectionNameModalOpen} onClose={() => setIsEditConnectionNameModalOpen(false)} onUpdate={handleEditConnectionName} connection={selectedConnection} />}
@@ -347,6 +351,18 @@ const Dashboard = () => {
                                                     ) : (
                                                         <button onClick={() => triggerJobAction(job.job_id, 'run')} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: '4px', cursor: 'pointer'}}>Backup Now</button>
                                                     )}
+                                                    <button
+                                                      onClick={() => {
+                                                        if (job.latest_history?.status === 'success') {
+                                                          showConfirmation('Restore from latest successful backup?', () => triggerJobAction(job.job_id, 'restore'));
+                                                        } else {
+                                                          showNotification('No successful backup found to restore.', 'error');
+                                                        }
+                                                      }}
+                                                      style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe', borderRadius: '4px', cursor: 'pointer' }}
+                                                    >
+                                                      Restore
+                                                    </button>
                                                     <button onClick={() => handleToggleJobStatus(job)} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: job.is_active ? '#FEF3C7' : '#E0E7FF', color: job.is_active ? '#92400E' : '#3730A3', border: `1px solid ${job.is_active ? '#FDE68A' : '#C7D2FE'}`, borderRadius: '4px', cursor: 'pointer' }}>{job.is_active ? 'Stop' : 'Start'}</button>
                                                     <button onClick={() => { setSelectedJob(job); setIsHistoryModalOpen(true); }} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB', borderRadius: '4px', cursor: 'pointer' }}>History</button>
                                                     <button onClick={() => { setSelectedJob(job); setIsEditJobModalOpen(true); }} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#F3F4F6', color: '#4B5563', border: '1px solid #E5E7EB', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
@@ -374,4 +390,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

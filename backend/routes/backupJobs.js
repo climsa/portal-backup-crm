@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const auth = require('../middleware/auth');
-const { runBackupJob, cancelBackupJob } = require('../backupScheduler');
+const { runBackupJob, cancelBackupJob, runRestoreJob } = require('../backupScheduler');
 
 // Mengambil semua pekerjaan backup milik klien yang sedang login
 router.get('/', auth, async (req, res) => {
@@ -153,6 +153,25 @@ router.post('/:id/retry', auth, async (req, res) => {
         res.status(202).json({ msg: 'Backup job has been re-triggered.' });
     } catch (error) {
         console.error(`[API] Error retrying job ${id}:`, error);
+        res.status(500).send('Server Error');
+    }
+});
+
+// Memicu proses restore dari backup sukses terbaru
+router.post('/:id/restore', auth, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const jobToRestore = await prisma.backup_jobs.findUnique({
+            where: { job_id: id },
+            include: { crm_connections: true },
+        });
+        if (!jobToRestore) {
+            return res.status(404).json({ msg: 'Job not found' });
+        }
+        runRestoreJob(jobToRestore);
+        res.status(202).json({ msg: 'Restore process has been triggered.' });
+    } catch (error) {
+        console.error(`[API] Error restoring job ${id}:`, error);
         res.status(500).send('Server Error');
     }
 });

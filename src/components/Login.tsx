@@ -1,5 +1,7 @@
-import React, { useState, ChangeEvent, FormEvent } from 'react';
+import { useState, ChangeEvent, FormEvent } from 'react';
 import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
@@ -19,7 +21,7 @@ const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('http://localhost:3000/api/auth/login', {
+      const res = await axios.post(`${API_BASE_URL}/auth/login`, {
         email,
         password,
       });
@@ -27,10 +29,14 @@ const Login = () => {
       localStorage.setItem('token', res.data.token);
       navigate('/dashboard');
 
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.msg || 'Terjadi kesalahan saat login.';
+    } catch (err: unknown) {
+      const errorMessage = axios.isAxiosError(err)
+        ? err.response?.data?.msg || 'Terjadi kesalahan saat login.'
+        : 'Terjadi kesalahan saat login.';
       setError(errorMessage);
-      console.error(err.response?.data);
+      if (axios.isAxiosError(err)) {
+        console.error(err.response?.data);
+      }
     }
   };
 

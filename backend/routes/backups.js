@@ -16,7 +16,7 @@ router.get('/:log_id/download', auth, async (req, res) => {
 
     // 1. Temukan entri log di database
     const logEntry = await prisma.job_history.findUnique({
-      where: { log_id: parseInt(log_id) },
+      where: { log_id }, // log_id bertipe UUID (String) sesuai schema Prisma
     });
 
     // 2. Validasi entri log
@@ -26,7 +26,9 @@ router.get('/:log_id/download', auth, async (req, res) => {
 
     // 3. Ekstrak path file dari detail log
     // Ini mengasumsikan format detailnya adalah ".... File saved to /path/to/file.zip"
-    const filePathString = logEntry.details.split('File saved to ')[1];
+    const filePathString = typeof logEntry.details === 'string' 
+      ? logEntry.details.split('File saved to ')[1]
+      : null;
     if (!filePathString) {
       return res.status(500).json({ msg: 'File path could not be determined from log details.' });
     }

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+
 interface Module {
   api_name: string;
   plural_label: string;
@@ -33,7 +35,7 @@ const AddJobModal: React.FC<AddJobModalProps> = ({ isOpen, onClose, onAdd }) => 
         try {
           const token = localStorage.getItem('token');
           const api = axios.create({
-            baseURL: 'http://localhost:3000/api',
+            baseURL: API_BASE_URL,
             headers: { 'Authorization': `Bearer ${token}` },
           });
           const res = await api.get('/zoho/modules');

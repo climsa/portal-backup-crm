@@ -19,7 +19,7 @@ const getZohoAccessToken = async (clientId) => {
   }
   const refreshToken = connection.encrypted_refresh_token;
 
-  const ZOHO_TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
+  const ZOHO_TOKEN_URL = process.env.ZOHO_TOKEN_URL || 'https://accounts.zoho.com/oauth/v2/token';
   const params = new URLSearchParams({
     refresh_token: refreshToken,
     client_id: process.env.ZOHO_CLIENT_ID,
@@ -78,7 +78,7 @@ router.get('/modules/:connectionId', auth, async (req, res) => {
     }
 
     // 2. Dapatkan access token baru menggunakan refresh token
-    const ZOHO_TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
+    const ZOHO_TOKEN_URL = process.env.ZOHO_TOKEN_URL || 'https://accounts.zoho.com/oauth/v2/token';
     const params = new URLSearchParams({
       refresh_token: connection.encrypted_refresh_token,
       client_id: process.env.ZOHO_CLIENT_ID,

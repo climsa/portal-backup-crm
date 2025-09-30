@@ -2,10 +2,10 @@ import React from 'react';
 
 interface NotificationModalProps {
   isOpen: boolean;
-  title: string;
+  title?: string;
   message: string;
   onClose: () => void;
-  onConfirm?: () => void; // Dibuat opsional, jika ada, ini adalah dialog konfirmasi
+  onConfirm?: () => void; // Opsional: jika ada, ini menjadi dialog konfirmasi
   type?: 'success' | 'error' | 'confirm';
 }
 
@@ -24,10 +24,12 @@ const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, title, me
     }
   };
 
+  const resolvedTitle = title ?? (type === 'error' ? 'Error' : type === 'confirm' ? 'Confirm' : 'Success');
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
       <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '100%', maxWidth: '450px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px', color: getTitleColor() }}>{title}</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px', color: getTitleColor() }}>{resolvedTitle}</h2>
         <p style={{ color: '#374151', marginBottom: '24px' }}>{message}</p>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px' }}>

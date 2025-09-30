@@ -1,7 +1,8 @@
 // File: src/components/JobHistoryModal.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { BackupJob, JobHistory } from '../types'; 
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 
 interface JobHistoryModalProps {
   isOpen: boolean;
@@ -9,8 +10,8 @@ interface JobHistoryModalProps {
   jobId: string | null;
 }
 
-interface JobHistory {
-  log_id: number;
+interface JobLog {
+  log_id: string;
   status: string;
   start_time: string;
   end_time: string | null;
@@ -18,7 +19,7 @@ interface JobHistory {
 }
 
 const JobHistoryModal: React.FC<JobHistoryModalProps> = ({ isOpen, onClose, jobId }) => {
-  const [history, setHistory] = useState<JobHistory[]>([]);
+  const [history, setHistory] = useState<JobLog[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   const fetchHistory = useCallback(async () => {
@@ -27,7 +28,7 @@ const JobHistoryModal: React.FC<JobHistoryModalProps> = ({ isOpen, onClose, jobI
     try {
       const token = localStorage.getItem('token');
       const api = axios.create({
-        baseURL: 'http://localhost:3000/api',
+        baseURL: API_BASE_URL,
         headers: { Authorization: `Bearer ${token}` },
       });
       const res = await api.get(`/history/${jobId}`);
@@ -46,14 +47,14 @@ const JobHistoryModal: React.FC<JobHistoryModalProps> = ({ isOpen, onClose, jobI
     }
   }, [isOpen, fetchHistory]);
 
-  const handleDownload = (logId: number) => {
+  const handleDownload = (logId: string) => {
     const token = localStorage.getItem('token');
     if (!token) {
         console.error('No token found for download.');
         return;
     }
     // Menggunakan window.location.href akan memicu unduhan di browser
-    const downloadUrl = `http://localhost:3000/api/backups/${logId}/download?token=${token}`;
+    const downloadUrl = `${API_BASE_URL}/backups/${logId}/download?token=${token}`;
     window.location.href = downloadUrl;
   };
 

@@ -1,6 +1,8 @@
 // File: src/components/EditJobModal.tsx - Diperbaiki
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 
 // Definisikan tipe data untuk kejelasan
 interface Module {
@@ -17,10 +19,12 @@ interface BackupJob {
   connection_id: string;
 }
 
+type UpdatedJobPayload = { job_name: string; schedule: string; selected_data: { modules: string[] } };
+
 interface EditJobModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (jobId: string, data: any) => void;
+  onSave: (jobId: string, data: UpdatedJobPayload) => void;
   job: BackupJob | null;
 }
 
@@ -45,7 +49,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, onSave, jo
         try {
           const token = localStorage.getItem('token');
           const api = axios.create({
-            baseURL: 'http://localhost:3000/api',
+            baseURL: API_BASE_URL,
             headers: { Authorization: `Bearer ${token}` },
           });
           const response = await api.get(`/zoho/modules/${job.connection_id}`);
